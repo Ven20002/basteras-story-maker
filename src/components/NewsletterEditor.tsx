@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Upload, Download, FileText } from "lucide-react";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
+import knightecLogo from "@/assets/knightec-logo.png";
 
 interface NewsletterData {
   title: string;
@@ -114,6 +115,11 @@ export const NewsletterEditor = () => {
         titleX += doc.getTextWidth(part + ' ');
       });
 
+      // Add logo at top right
+      const logoWidth = 60;
+      const logoHeight = 20;
+      doc.addImage(knightecLogo, 'PNG', 210 - logoWidth - 15, 10, logoWidth, logoHeight);
+
       // News box background
       doc.setFillColor(...boxColor);
       doc.rect(10, 35, 190, 240, 'F');
@@ -214,6 +220,11 @@ export const NewsletterEditor = () => {
       doc.text(`Thanks for reading this week's edition of ${data.title}.`, 105, 285, { align: 'center' });
       doc.text('If you have feedback, suggestions, or interesting topics, feel free to reach out.', 105, 290, { align: 'center' });
 
+      // Add logo at bottom right
+      const bottomLogoWidth = 50;
+      const bottomLogoHeight = 17;
+      doc.addImage(knightecLogo, 'PNG', 210 - bottomLogoWidth - 15, 297 - bottomLogoHeight - 5, bottomLogoWidth, bottomLogoHeight);
+
       // Save PDF
       doc.save(`${data.title.replace(/\s+/g, '_')}_${Date.now()}.pdf`);
       toast.success("PDF generated successfully!");
@@ -228,12 +239,17 @@ export const NewsletterEditor = () => {
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-4xl mx-auto space-y-6">
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-2 relative">
           <h1 className="text-4xl font-bold text-foreground flex items-center justify-center gap-2">
             <FileText className="w-8 h-8 text-accent" />
             Newsletter Editor
           </h1>
           <p className="text-muted-foreground">Create your newsletter and generate a beautiful PDF</p>
+          <img 
+            src={knightecLogo} 
+            alt="Knightec Group" 
+            className="absolute top-0 right-0 h-8 w-auto"
+          />
         </div>
 
         <Card>
