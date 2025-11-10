@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Upload, Download, FileText } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import jsPDF from "jspdf";
 
 interface NewsletterData {
   title: string;
@@ -43,6 +43,39 @@ export const NewsletterEditor = () => {
     setData(prev => ({ ...prev, [field]: file }));
   };
 
+  const getImageDataUrl = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target?.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const wrapText = (text: string, maxWidth: number, doc: jsPDF): string[] => {
+    const lines: string[] = [];
+    const words = text.split(' ');
+    let currentLine = '';
+
+    words.forEach((word) => {
+      const testLine = currentLine + (currentLine ? ' ' : '') + word;
+      const textWidth = doc.getTextWidth(testLine);
+      
+      if (textWidth > maxWidth && currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
+    });
+    
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+    
+    return lines;
+  };
+
   const handleGeneratePDF = async () => {
     if (!data.news1Content || !data.news2Content || !data.officeNewsContent) {
       toast.error("Please fill in all content fields");
@@ -51,66 +84,138 @@ export const NewsletterEditor = () => {
 
     setIsGenerating(true);
     try {
-      // Upload images to Supabase Storage if provided
-      let news1ImagePath = null;
-      let news2ImagePath = null;
-
-      if (data.news1Image) {
-        news1ImagePath = `newsletter-images/${Date.now()}-news1-${data.news1Image.name}`;
-        const { error: uploadError1 } = await supabase.storage
-          .from('newsletter-assets')
-          .upload(news1ImagePath, data.news1Image);
-        if (uploadError1) {
-          console.error('Error uploading news1 image:', uploadError1);
-        }
-      }
-
-      if (data.news2Image) {
-        news2ImagePath = `newsletter-images/${Date.now()}-news2-${data.news2Image.name}`;
-        const { error: uploadError2 } = await supabase.storage
-          .from('newsletter-assets')
-          .upload(news2ImagePath, data.news2Image);
-        if (uploadError2) {
-          console.error('Error uploading news2 image:', uploadError2);
-        }
-      }
-
-      // Call edge function to generate PDF
-      const { data: result, error } = await supabase.functions.invoke('generate-newsletter-pdf', {
-        body: {
-          title: data.title,
-          news1: {
-            title: data.news1Title,
-            content: data.news1Content,
-            imagePath: news1ImagePath,
-          },
-          news2: {
-            title: data.news2Title,
-            content: data.news2Content,
-            imagePath: news2ImagePath,
-          },
-          officeNews: {
-            title: data.officeNewsTitle,
-            content: data.officeNewsContent,
-          },
-        },
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
       });
 
-      if (error) {
-        throw error;
+      // Colors matching the LaTeX template
+      const bgColor: [number, number, number] = [249, 247, 243];
+      const boxColor: [number, number, number] = [235, 230, 223];
+      const accentOrange: [number, number, number] = [255, 166, 0];
+      const textBlack: [number, number, number] = [25, 25, 25];
+
+      // Background
+      doc.setFillColor(...bgColor);
+      doc.rect(0, 0, 210, 297, 'F');
+
+      // Title
+      doc.setFontSize(36);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...textBlack);
+      const titleParts = data.title.split(' ');
+      let titleX = 20;
+      titleParts.forEach((part, index) => {
+        if (index === titleParts.length - 1) {
+          doc.setTextColor(...accentOrange);
+        }
+        doc.text(part, titleX, 25);
+        titleX += doc.getTextWidth(part + ' ');
+      });
+
+      // News box background
+      doc.setFillColor(...boxColor);
+      doc.rect(10, 35, 190, 240, 'F');
+
+      let yPos = 50;
+      const columnWidth = 85;
+      const leftColumn = 20;
+      const rightColumn = 110;
+
+      // News 1 - Left Column
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...textBlack);
+      
+      // Add image for news 1 if available
+      if (data.news1Image) {
+        try {
+          const imageData = await getImageDataUrl(data.news1Image);
+          doc.addImage(imageData, 'JPEG', leftColumn, yPos, 60, 40);
+          yPos += 45;
+        } catch (error) {
+          console.error('Error adding news1 image:', error);
+        }
       }
 
-      // Download the PDF
-      const pdfBlob = new Blob([new Uint8Array(result.pdf.data)], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(pdfBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${data.title.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      doc.text(data.news1Title, leftColumn, yPos);
+      yPos += 8;
+      
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      const news1Lines = wrapText(data.news1Content, columnWidth, doc);
+      news1Lines.forEach(line => {
+        doc.text(line, leftColumn, yPos);
+        yPos += 5;
+      });
 
+      // News 2 - Right Column
+      yPos = 50;
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text(data.news2Title, rightColumn, yPos);
+      yPos += 8;
+      
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      const news2Lines = wrapText(data.news2Content, columnWidth, doc);
+      news2Lines.forEach(line => {
+        doc.text(line, rightColumn, yPos);
+        yPos += 5;
+      });
+
+      // Add image for news 2 if available
+      if (data.news2Image) {
+        try {
+          yPos += 3;
+          const imageData = await getImageDataUrl(data.news2Image);
+          doc.addImage(imageData, 'JPEG', rightColumn, yPos, 70, 45);
+          yPos += 50;
+        } catch (error) {
+          console.error('Error adding news2 image:', error);
+        }
+      }
+
+      // Office News - Continue in right column or wrap to left if needed
+      yPos += 10;
+      if (yPos > 240) {
+        yPos = 180;
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.text(data.officeNewsTitle, leftColumn, yPos);
+        yPos += 8;
+        
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        const officeLines = wrapText(data.officeNewsContent, columnWidth, doc);
+        officeLines.forEach(line => {
+          doc.text(line, leftColumn, yPos);
+          yPos += 5;
+        });
+      } else {
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.text(data.officeNewsTitle, rightColumn, yPos);
+        yPos += 8;
+        
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        const officeLines = wrapText(data.officeNewsContent, columnWidth, doc);
+        officeLines.forEach(line => {
+          doc.text(line, rightColumn, yPos);
+          yPos += 5;
+        });
+      }
+
+      // Footer
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Thanks for reading this week's edition of ${data.title}.`, 105, 285, { align: 'center' });
+      doc.text('If you have feedback, suggestions, or interesting topics, feel free to reach out.', 105, 290, { align: 'center' });
+
+      // Save PDF
+      doc.save(`${data.title.replace(/\s+/g, '_')}_${Date.now()}.pdf`);
       toast.success("PDF generated successfully!");
     } catch (error: any) {
       console.error('Error generating PDF:', error);
@@ -172,7 +277,7 @@ export const NewsletterEditor = () => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="news1-image">Image (Optional - Coming Soon)</Label>
+              <Label htmlFor="news1-image">Image (Optional)</Label>
               <div className="flex items-center gap-2">
                 <Input
                   id="news1-image"
@@ -180,7 +285,6 @@ export const NewsletterEditor = () => {
                   accept="image/*"
                   onChange={(e) => handleImageUpload('news1Image', e.target.files?.[0] || null)}
                   className="cursor-pointer"
-                  disabled
                 />
                 {data.news1Image && (
                   <span className="text-sm text-muted-foreground flex items-center gap-1">
@@ -189,7 +293,6 @@ export const NewsletterEditor = () => {
                   </span>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">Image support will be added in a future update</p>
             </div>
           </CardContent>
         </Card>
@@ -220,7 +323,7 @@ export const NewsletterEditor = () => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="news2-image">Image (Optional - Coming Soon)</Label>
+              <Label htmlFor="news2-image">Image (Optional)</Label>
               <div className="flex items-center gap-2">
                 <Input
                   id="news2-image"
@@ -228,7 +331,6 @@ export const NewsletterEditor = () => {
                   accept="image/*"
                   onChange={(e) => handleImageUpload('news2Image', e.target.files?.[0] || null)}
                   className="cursor-pointer"
-                  disabled
                 />
                 {data.news2Image && (
                   <span className="text-sm text-muted-foreground flex items-center gap-1">
@@ -237,7 +339,6 @@ export const NewsletterEditor = () => {
                   </span>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">Image support will be added in a future update</p>
             </div>
           </CardContent>
         </Card>
