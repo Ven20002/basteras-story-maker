@@ -230,10 +230,10 @@ export const NewsletterEditor = () => {
       doc.text(`Thanks for reading this week's edition of ${data.title}.`, 105, 285, { align: 'center' });
       doc.text('If you have feedback, suggestions, or interesting topics, feel free to reach out.', 105, 290, { align: 'center' });
 
-      // Add logo at bottom right with proper aspect ratio
-      const bottomLogoDesiredWidth = 50;
+      // Add logo at bottom right with proper aspect ratio (same size as top, aligned with text)
+      const bottomLogoDesiredWidth = 60;
       const bottomLogoHeight = bottomLogoDesiredWidth / logoAspectRatio;
-      doc.addImage(knightecLogo, 'PNG', 210 - bottomLogoDesiredWidth - 15, 297 - bottomLogoHeight - 5, bottomLogoDesiredWidth, bottomLogoHeight);
+      doc.addImage(knightecLogo, 'PNG', 210 - bottomLogoDesiredWidth - 15, 290 - (bottomLogoHeight / 2), bottomLogoDesiredWidth, bottomLogoHeight);
 
       // Save PDF
       doc.save(`${data.title.replace(/\s+/g, '_')}_${Date.now()}.pdf`);
