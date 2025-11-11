@@ -115,10 +115,20 @@ export const NewsletterEditor = () => {
         titleX += doc.getTextWidth(part + ' ');
       });
 
-      // Add logo at top right
-      const logoWidth = 60;
-      const logoHeight = 20;
-      doc.addImage(knightecLogo, 'PNG', 210 - logoWidth - 15, 10, logoWidth, logoHeight);
+      // Load logo to get natural dimensions and calculate proper aspect ratio
+      const img = new Image();
+      img.src = knightecLogo;
+      await new Promise((resolve) => {
+        img.onload = resolve;
+      });
+      
+      // Calculate logo dimensions maintaining aspect ratio
+      const logoDesiredWidth = 60;
+      const logoAspectRatio = img.naturalWidth / img.naturalHeight;
+      const logoHeight = logoDesiredWidth / logoAspectRatio;
+      
+      // Add logo at top right with proper aspect ratio
+      doc.addImage(knightecLogo, 'PNG', 210 - logoDesiredWidth - 15, 10, logoDesiredWidth, logoHeight);
 
       // News box background
       doc.setFillColor(...boxColor);
@@ -220,10 +230,10 @@ export const NewsletterEditor = () => {
       doc.text(`Thanks for reading this week's edition of ${data.title}.`, 105, 285, { align: 'center' });
       doc.text('If you have feedback, suggestions, or interesting topics, feel free to reach out.', 105, 290, { align: 'center' });
 
-      // Add logo at bottom right
-      const bottomLogoWidth = 50;
-      const bottomLogoHeight = 17;
-      doc.addImage(knightecLogo, 'PNG', 210 - bottomLogoWidth - 15, 297 - bottomLogoHeight - 5, bottomLogoWidth, bottomLogoHeight);
+      // Add logo at bottom right with proper aspect ratio
+      const bottomLogoDesiredWidth = 50;
+      const bottomLogoHeight = bottomLogoDesiredWidth / logoAspectRatio;
+      doc.addImage(knightecLogo, 'PNG', 210 - bottomLogoDesiredWidth - 15, 297 - bottomLogoHeight - 5, bottomLogoDesiredWidth, bottomLogoHeight);
 
       // Save PDF
       doc.save(`${data.title.replace(/\s+/g, '_')}_${Date.now()}.pdf`);
